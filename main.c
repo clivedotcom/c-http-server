@@ -1,5 +1,4 @@
-// Server side C program to demonstrate Socket
-// programming
+//C HTTP Server
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
