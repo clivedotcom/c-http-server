@@ -1,124 +1,103 @@
-//C HTTP Server
-#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <unistd.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+
 #define PORT 8088
-char *getPathOfGetRequest(const char *buf) 
-   {
-   const char *start = buf;
-   const char *end;
-   char       *path=NULL;
-   size_t      pathLen;
+#define BUFFER_SIZE 1024
+#define MAX_REQUEST_SIZE 1024
 
-   /* Verify that there is a 'GET ' at the beginning of the string. */
-   if(strncmp("GET ", start, 4))
-      {
-      fprintf(stderr, "Parse error: 'GET ' is missing.\n");
-      goto CLEANUP;
-      }
-
-   /* Set the start pointer at the first character beyond the 'GET '. */
-   start += 4;
-
-   /* From the start position, set the end pointer to the first white-space character found in the string. */
-   end=start;
-   while(*end && !isspace(*end))
-      ++end;
-
-   /* Calculate the path length, and allocate sufficient memory for the path plus string termination. */
-   pathLen = (end - start);
-   path = malloc(pathLen + 1);
-   if(NULL == path)
-      {
-      fprintf(stderr, "malloc() failed. \n");
-      goto CLEANUP;
-      }
-
-   /* Copy the path string to the path storage. */
-   memcpy(path, start, pathLen);
-
-   /* Terminate the string. */
-   path[pathLen] = '\0';
-
-CLEANUP:
-
-   /* Return the allocated storage, or NULL in the event of an error, to the caller. */
-   return(path);
-   }
-
-int main(int argc, char const* argv[])
-{
-    int server_fd, new_socket;
-    ssize_t valread;
-    struct sockaddr_in address;
-    int opt = 1;
-    socklen_t addrlen = sizeof(address);
-    char buffer[1024] = { 0 };
-    
- 
-    // Creating socket file descriptor
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        perror("socket failed");
-        exit(EXIT_FAILURE);
+int file_exists(const char *filename) {
+    // Check if the file exists by testing for read access
+    if (access(filename, F_OK) != -1) {
+        // File exists
+        return 1;
+    } else {
+        // File doesn't exist
+        return 0;
     }
- 
-    // Forcefully attaching socket to the port 8088
-    if (setsockopt(server_fd, SOL_SOCKET,
-                   SO_REUSEADDR | SO_REUSEPORT, &opt,
-                   sizeof(opt))) {
-        perror("setsockopt");
+}
+
+void *connection_handler(void *socket_desc) {
+    int sock = *(int*)socket_desc;
+    char buffer[BUFFER_SIZE] = {0};
+    ssize_t valread;
+    char method[16], url[256];
+    // Read the request
+    valread = read(sock, buffer, BUFFER_SIZE);
+    extract_method_and_url(buffer, method, url);
+    // Print the extracted method and URL
+    char response[1024];
+    snprintf(response, sizeof(response), "HTTP/1.1 200 OK\nContent-Type: text/html\n\n<html><body><h1>Hello, World!</h1>Method: %s<br /> URL %s</body></html>", method, url);
+    // Send the response
+    write(sock, response, strlen(response));
+    // Close the socket and free the socket descriptor
+    close(sock);
+    free(socket_desc);
+    return NULL;
+}
+
+void extract_method_and_url(const char *request, char *method, char *url) {
+    // Example HTTP Request | GET /index.html HTTP/1.1\r\nHost: www.example.com\r\n\r\n
+    // Find the first space to separate method and URL
+    const char *space_pos = strchr(request, ' ');
+    if (space_pos) {
+        // Copy the method from the request
+        int method_length = space_pos - request;
+        strncpy(method, request, method_length);
+        method[method_length] = '\0';
+        // Find the end of the URL (next space or newline)
+        const char *url_start = space_pos + 1;
+        const char *url_end = strpbrk(url_start, " \r\n");
+        if (url_end) {
+            // Copy the URL from the request
+            int url_length = url_end - url_start;
+            strncpy(url, url_start, url_length);
+            url[url_length] = '\0';
+        }
+    }
+}
+
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    // Create socket file descriptor
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        printf("Socket creation failed");
         exit(EXIT_FAILURE);
     }
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(PORT);
- 
-    // Forcefully attaching socket to the port 8088
-    if (bind(server_fd, (struct sockaddr*)&address,
-             sizeof(address))
-        < 0) {
-        perror("bind failed");
+    // Bind the socket to localhost port 8088
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address))<0) {
+        printf("Bind failed");
         exit(EXIT_FAILURE);
     }
+    // Listen for incoming connections
     if (listen(server_fd, 3) < 0) {
-        perror("listen");
+        printf("Listen failed");
         exit(EXIT_FAILURE);
     }
-    for (;;) {
-    if ((new_socket
-         = accept(server_fd, (struct sockaddr*)&address,
-                  &addrlen))
-        < 0) {
-        perror("accept");
+    // Accept incoming connections and create a thread for each
+    while ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen))) {
+        pthread_t thread_id;
+        int *new_sock = malloc(sizeof(int));
+        *new_sock = new_socket;
+
+        if (pthread_create(&thread_id, NULL, connection_handler, (void*)new_sock) < 0) {
+            printf("Thread creation failed");
+            exit(EXIT_FAILURE);
+        }
+        // Detach the thread to avoid memory leaks
+        pthread_detach(thread_id);
+    }
+    if (new_socket<0) {
+        printf("Accept failed");
         exit(EXIT_FAILURE);
     }
-    valread = read(new_socket, buffer,
-                   1024 - 1); // subtract 1 for the null
-                              // terminator at the end
-    //printf("%s\n", buffer);
-   char *url =  getPathOfGetRequest(buffer);
-    char hello[] = "HTTP/1.0 404 OK\r\n"
-"Server: webserver-c\r\n"
-"Content-type: text/html\r\n\r\n"
-"<html><h1>hello, world</h1><b>This is a website</b><br />You have requested: %s</html>\r\n";
-
-char* name_with_extension;
-name_with_extension = malloc(strlen(hello)+strlen(url));
-strcpy(name_with_extension, hello); /* copy name into the new var */
-strcat(name_with_extension, url); /* add the extension */
-printf("%s\n", name_with_extension);
-
-//printf("%s\n",url);
-    send(new_socket, name_with_extension, strlen(name_with_extension), 0);
-    //printf("Hello message sent\n");
- 
-    // closing the connected socket
-    close(new_socket);
-    }
-    // closing the listening socket
-    close(server_fd);
     return 0;
 }
