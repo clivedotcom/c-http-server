@@ -9,10 +9,73 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-#include "fileExists.h"
-#include "connectionHandler.h"
-#include "extractMethodAndURL.h"
 
+int file_exists(char* filename) {
+    // Check if the file exists by testing for read access
+char* str = "/var/www/";
+char dest[strlen(DEFAULT_DIR)+strlen(filename)];
+strcpy( dest, DEFAULT_DIR );
+strcat( dest, filename );
+    if (access(dest, F_OK) != -1) {
+        // File exists
+        return 1;
+    } else {
+        // File doesn't exist
+        return 0;
+    }
+}
+
+void extract_method_and_url(const char *request, char *method, char *url) {
+    // Example HTTP Request | GET /index.html HTTP/1.1\r\nHost: www.example.com\r\n\r\n
+    // Find the first space to separate method and URL
+    const char *space_pos = strchr(request, ' ');
+    if (space_pos) {
+        // Copy the method from the request
+        int method_length = space_pos - request;
+        strncpy(method, request, method_length);
+        method[method_length] = '\0';
+        // Find the end of the URL (next space or newline)
+        const char *url_start = space_pos + 1;
+        const char *url_end = strpbrk(url_start, " \r\n");
+        if (url_end) {
+            // Copy the URL from the request
+            int url_length = url_end - url_start;
+            strncpy(url, url_start, url_length);
+            url[url_length] = '\0';
+        }
+    }
+}
+
+void *connection_handler(void *socket_desc) {
+    int sock = *(int*)socket_desc;
+    char buffer[BUFFER_SIZE] = {0};
+    ssize_t valread;
+    char method[16], url[256];
+    // Read the request
+    valread = read(sock, buffer, BUFFER_SIZE);
+    extract_method_and_url(buffer, method, url);
+    char response[1024];
+      if(file_exists(url))
+    {
+        // File exists
+        snprintf(response, sizeof(response), "HTTP/1.1 200 OK\nContent-Type: text/html\n\n<html><body><h1>Hello, World!</h1>Method: %s<br /> URL %s <br /><a href=\"page.html\">Another page...</a></body></html>", method, url);
+    
+    }
+    else
+    {
+        // Filedoesnt Exists.
+        snprintf(response, sizeof(response), "HTTP/1.1 404 OK\nContent-Type: text/html\n\n<html><body><h1>404 Error!</h1>Page %s not found...</body></html>", url);
+    
+    }  
+    // Print the extracted method and URL
+    //snprintf(response, sizeof(response), "HTTP/1.1 200 OK\nContent-Type: text/html\n\n<html><body><h1>Hello, World!</h1>Method: %s<br /> URL %s</body></html>", method, url);
+    // Send the response
+    write(sock, response, strlen(response));
+    // Close the socket and free the socket descriptor
+    close(sock);
+    free(socket_desc);
+    return NULL;
+}
 int main() {
     setvbuf (stdout, NULL, _IONBF, 0);
     int server_fd, new_socket;
