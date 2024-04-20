@@ -9,9 +9,13 @@
 #define BUFFER_SIZE 1024
 #define MAX_REQUEST_SIZE 1024
 
-int file_exists(const char *filename) {
+int file_exists(char* filename) {
     // Check if the file exists by testing for read access
-    if (access(filename, F_OK) != -1) {
+char* str = "/var/www/";
+char dest[strlen(str)+strlen(filename)];
+strcpy( dest, str );
+strcat( dest, filename );
+    if (access(dest, F_OK) != -1) {
         // File exists
         return 1;
     } else {
@@ -28,9 +32,21 @@ void *connection_handler(void *socket_desc) {
     // Read the request
     valread = read(sock, buffer, BUFFER_SIZE);
     extract_method_and_url(buffer, method, url);
-    // Print the extracted method and URL
     char response[1024];
-    snprintf(response, sizeof(response), "HTTP/1.1 200 OK\nContent-Type: text/html\n\n<html><body><h1>Hello, World!</h1>Method: %s<br /> URL %s</body></html>", method, url);
+      if(file_exists(url))
+    {
+        // File exists
+        snprintf(response, sizeof(response), "HTTP/1.1 200 OK\nContent-Type: text/html\n\n<html><body><h1>Hello, World!</h1>Method: %s<br /> URL %s <br /><a href=\"page.html\">Another page...</a></body></html>", method, url);
+    
+    }
+    else
+    {
+        // Filedoesnt Exists.
+        snprintf(response, sizeof(response), "HTTP/1.1 404 OK\nContent-Type: text/html\n\n<html><body><h1>404 Error!</h1>Page %s not found...</body></html>", url);
+    
+    }  
+    // Print the extracted method and URL
+    //snprintf(response, sizeof(response), "HTTP/1.1 200 OK\nContent-Type: text/html\n\n<html><body><h1>Hello, World!</h1>Method: %s<br /> URL %s</body></html>", method, url);
     // Send the response
     write(sock, response, strlen(response));
     // Close the socket and free the socket descriptor
@@ -61,6 +77,7 @@ void extract_method_and_url(const char *request, char *method, char *url) {
 }
 
 int main() {
+    setvbuf (stdout, NULL, _IONBF, 0);
     int server_fd, new_socket;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
