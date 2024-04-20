@@ -10,9 +10,9 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
+// Method to check if a requested file exists
 int file_exists(char* filename) {
     // Check if the file exists by testing for read access
-char* str = "/var/www/";
 char dest[strlen(DEFAULT_DIR)+strlen(filename)];
 strcpy( dest, DEFAULT_DIR );
 strcat( dest, filename );
@@ -25,6 +25,7 @@ strcat( dest, filename );
     }
 }
 
+// Method to extract the method & requested resource
 void extract_method_and_url(const char *request, char *method, char *url) {
     // Example HTTP Request | GET /index.html HTTP/1.1\r\nHost: www.example.com\r\n\r\n
     // Find the first space to separate method and URL
@@ -46,6 +47,7 @@ void extract_method_and_url(const char *request, char *method, char *url) {
     }
 }
 
+// Method to handle content served once connection established
 void *connection_handler(void *socket_desc) {
     int sock = *(int*)socket_desc;
     char buffer[BUFFER_SIZE] = {0};
@@ -63,12 +65,10 @@ void *connection_handler(void *socket_desc) {
     }
     else
     {
-        // Filedoesnt Exists.
+        // File doesn't Exists.
         snprintf(response, sizeof(response), "HTTP/1.1 404 OK\nContent-Type: text/html\n\n<html><body><h1>404 Error!</h1>Page %s not found...</body></html>", url);
     
-    }  
-    // Print the extracted method and URL
-    //snprintf(response, sizeof(response), "HTTP/1.1 200 OK\nContent-Type: text/html\n\n<html><body><h1>Hello, World!</h1>Method: %s<br /> URL %s</body></html>", method, url);
+    }
     // Send the response
     write(sock, response, strlen(response));
     // Close the socket and free the socket descriptor
@@ -76,6 +76,7 @@ void *connection_handler(void *socket_desc) {
     free(socket_desc);
     return NULL;
 }
+
 int main() {
     setvbuf (stdout, NULL, _IONBF, 0);
     int server_fd, new_socket;
