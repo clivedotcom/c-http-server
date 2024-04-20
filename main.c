@@ -8,12 +8,13 @@
 #define PORT 8088
 #define BUFFER_SIZE 1024
 #define MAX_REQUEST_SIZE 1024
+#define DEFAULT_DIR "/var/www/"
 
 int file_exists(char* filename) {
     // Check if the file exists by testing for read access
 char* str = "/var/www/";
-char dest[strlen(str)+strlen(filename)];
-strcpy( dest, str );
+char dest[strlen(DEFAULT_DIR)+strlen(filename)];
+strcpy( dest, DEFAULT_DIR );
 strcat( dest, filename );
     if (access(dest, F_OK) != -1) {
         // File exists
